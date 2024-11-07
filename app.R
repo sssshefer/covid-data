@@ -6,8 +6,8 @@
 # ================================
 
 # 1. Setup
-# Install necessary packages
-# install.packages(c("dplyr", "tidyr", "lubridate", "ggplot2", "shiny", "bslib", "leaflet", "rnaturalearth", "sf", "rnaturalearthdata"))
+# Install necessary packages if needed
+# install.packages(c("dplyr", "tidyr", "lubridate", "ggplot2", "shiny", "bslib", "leaflet", "rnaturalearth", "sf", "rnaturalearthdata", "plotly"))
 
 # Load necessary packages
 library(dplyr)
@@ -20,12 +20,18 @@ library(leaflet)
 library(rnaturalearth)
 library(sf)
 library(rnaturalearthdata)
+library(plotly)  # New package for interactive bar plot
 
 # Load data
 tblBase <- read.csv("worldometer_coronavirus_daily_data.csv")
-
 # Convert date column to Date type
 tblBase$date <- as.Date(tblBase$date, format = "%Y-%m-%d")
+
+tblBase <- tblBase %>%
+  mutate(
+    country = ifelse(country == "USA", "United States of America",
+                     ifelse(country == "UK", "United Kingdom", country))
+  )
 
 # Load world boundaries data
 world <- ne_countries(scale = "medium", returnclass = "sf")
@@ -34,14 +40,13 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 world_data <- world %>%
   left_join(tblBase %>% filter(date == max(date, na.rm = TRUE)), by = c("name" = "country"))
 
+
+View(world_data)
 # Define UI for app with time series plot and choropleth map
 ui <- page_sidebar(
-  # App title
   title = "Covid Data Visualization",
   
-  # Sidebar panel for inputs
   sidebar = sidebar(
-    # Display total new cases and new deaths with dynamic percentage change
     div(
       h4("New Positive Cases"),
       textOutput("total_new_cases"),
@@ -56,23 +61,6 @@ ui <- page_sidebar(
       style = "font-size: 20px; padding: 10px; background-color: #f0f0f0; margin-bottom: 10px; border-radius: 5px;"
     ),
     
-    # Input: Select country for time series plot
-    selectInput(
-      inputId = "country",
-      label = "Select country:",
-      choices = unique(tblBase$country),
-      selected = "Afghanistan"
-    ),
-    
-    # Input: Select column for time series plot
-    selectInput(
-      inputId = "column",
-      label = "Select column to plot:",
-      choices = c("cumulative_total_cases", "daily_new_cases", "active_cases", "cumulative_total_deaths", "daily_new_deaths"),
-      selected = "daily_new_cases"
-    ),
-    
-    # Input: Select new or cumulative data for map
     selectInput(
       inputId = "map_data_type",
       label = "Select data type:",
@@ -80,7 +68,6 @@ ui <- page_sidebar(
       selected = "new"
     ),
     
-    # Input: Select metric (positive cases or deaths) for map
     selectInput(
       inputId = "map_metric",
       label = "Select metric:",
@@ -89,17 +76,15 @@ ui <- page_sidebar(
     )
   ),
   
-  # Output: Time series plot
-  plotOutput(outputId = "timeSeriesPlot"),
+  plotlyOutput(outputId = "barPlot"),  # Plotly output for interactive scrollable plot
   
-  # Output: Leaflet map
   leafletOutput(outputId = "covidMap", height = "600px")
 )
 
-# Define server logic for time series plot and choropleth map
+# Define server logic for bar plot and choropleth map
 server <- function(input, output) {
   
-  # Calculate total new cases for the latest date and compare with the previous day
+  # Display total new cases for the latest date
   output$total_new_cases <- renderText({
     latest_date <- max(tblBase$date, na.rm = TRUE)
     total_cases <- tblBase %>%
@@ -109,6 +94,7 @@ server <- function(input, output) {
     paste(total_cases)
   })
   
+  # Display percentage change in new cases
   output$cases_change <- renderText({
     latest_date <- max(tblBase$date, na.rm = TRUE)
     previous_date <- latest_date - 1
@@ -122,6 +108,7 @@ server <- function(input, output) {
     }
   })
   
+  # Display total new deaths for the latest date
   output$total_new_deaths <- renderText({
     latest_date <- max(tblBase$date, na.rm = TRUE)
     total_deaths <- tblBase %>%
@@ -131,6 +118,7 @@ server <- function(input, output) {
     paste(total_deaths)
   })
   
+  # Display percentage change in new deaths
   output$deaths_change <- renderText({
     latest_date <- max(tblBase$date, na.rm = TRUE)
     previous_date <- latest_date - 1
@@ -143,22 +131,89 @@ server <- function(input, output) {
       "No data for previous day"
     }
   })
-  
-  output$timeSeriesPlot <- renderPlot({
-    country_data <- tblBase %>% filter(country == input$country)
-    column_data <- as.numeric(country_data[[input$column]])
-    valid_data <- country_data %>% mutate(selected_column = column_data) %>% filter(!is.na(selected_column) & is.finite(selected_column))
-    if (nrow(valid_data) == 0) {
-      plot.new()
-      text(0.5, 0.5, "No valid numeric data available in the selected column. Choose a different column.", cex = 1.5, col = "red")
-    } else {
-      ggplot(valid_data, aes(x = date, y = selected_column)) +
-        geom_line(color = "#007bc2") +
-        labs(x = "Date", y = input$column, title = paste(input$column, "over time for", input$country)) +
-        theme_minimal()
+ 
+  # Render the interactive bar plot
+  # Render the interactive bar plot
+  # Render the interactive bar plot
+  # Render the interactive bar plot
+  output$barPlot <- renderPlotly({
+    latest_date <- max(tblBase$date, na.rm = TRUE)
+    plot_data <- tblBase %>% filter(date == latest_date)
+    
+    # Check if we have any data for the plot
+    if (nrow(plot_data) == 0) {
+      return(NULL)  # If no data, return NULL to prevent plot rendering
     }
+    
+    # Choose the appropriate column based on input values
+    plot_column <- if (input$map_metric == "cases") {
+      if (input$map_data_type == "new") "daily_new_cases" else "cumulative_total_cases"
+    } else {
+      if (input$map_data_type == "new") "daily_new_deaths" else "cumulative_total_deaths"
+    }
+    
+    # Check if the selected column exists in the data
+    if (!(plot_column %in% colnames(plot_data))) {
+      stop(paste("Error: column", plot_column, "does not exist in the dataset."))
+    }
+    
+    # Filter out rows with NA values for the selected plot column
+    plot_data <- plot_data %>%
+      select(country, !!sym(plot_column), daily_new_cases, cumulative_total_cases, daily_new_deaths, cumulative_total_deaths) %>%
+      filter(!is.na(!!sym(plot_column))) %>%
+      arrange(desc(!!sym(plot_column))) %>%
+      slice(1:20)  # Show only top 20 countries
+    
+    # Create the bar plot with ggplot2, positioning country names on the left
+    p <- ggplot(plot_data, aes(x = reorder(country, !!sym(plot_column)), y = !!sym(plot_column))) +
+      geom_bar(stat = "identity", fill = "#00a9e0") +  # Blue color for the bars
+      geom_text(aes(label = country), hjust = 1.05, vjust = 0.5, size = 3.5, color = "black") +  # Align country names to the left
+      coord_flip() +
+      labs(x = NULL, y = NULL, title = if (input$map_metric == "cases") {
+        if (input$map_data_type == "new") "Daily new cases" else "Cumulative total cases"
+      } else {
+        if (input$map_data_type == "new") "Daily new deaths" else "Cumulative total deaths"
+      }) +  # Simplified axis labels
+      theme_minimal() +
+      theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.text.y = element_blank(),  # Remove y-axis text (countries) to avoid duplication
+        axis.text.x = element_text(size = 8),  # Values size
+        panel.grid.major = element_blank(),  # Remove grid lines
+        panel.grid.minor = element_blank()
+      ) +
+      scale_y_continuous(labels = scales::comma)  # Add comma formatting for large numbers
+    
+    # Convert ggplot to plotly for interactivity and hover details
+    ggplotly(p, tooltip = "text") %>%
+      layout(
+        yaxis = list(
+          tickvals = plot_data$country,
+          title = list(standoff = 20, font = list(size = 12))
+        ),
+        xaxis = list(title = NULL),
+        margin = list(l = 150)  # Adjust left margin for country names
+      ) %>%
+      config(displayModeBar = FALSE) %>%
+      layout(showlegend = FALSE) %>%
+      # Add custom hover text
+      style(
+        hovertext = paste(
+          "Country: ", plot_data$country, "<br>",
+          "New Cases: ", plot_data$daily_new_cases, "<br>",
+          "Cumulative Cases: ", plot_data$cumulative_total_cases, "<br>",
+          "New Deaths: ", plot_data$daily_new_deaths, "<br>",
+          "Cumulative Deaths: ", plot_data$cumulative_total_deaths
+        )
+      )
   })
   
+  
+  
+  
+  
+  
+  # Render the Leaflet map
   output$covidMap <- renderLeaflet({
     latest_date <- max(tblBase$date, na.rm = TRUE)
     map_data <- tblBase %>% filter(date == latest_date)
@@ -199,8 +254,8 @@ server <- function(input, output) {
         position = "bottomright"
       )
   })
-  
 }
+
 
 # Run the application
 shinyApp(ui = ui, server = server)
