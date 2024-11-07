@@ -18,7 +18,7 @@ library(shiny)
 library(bslib)
 
 # Load data
-tblBase <- read.csv("C:/Users/arkad/Desktop/XAMK/XAMK_3_YEAR/BigData/Covid-interactive-project/worldometer_coronavirus_daily_data.csv")
+tblBase <- read.csv("worldometer_coronavirus_daily_data.csv")
 
 # Convert date column to Date type
 tblBase$date <- as.Date(tblBase$date, format = "%Y-%m-%d")
