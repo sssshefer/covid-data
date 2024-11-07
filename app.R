@@ -7,7 +7,7 @@
 
 # 1. Setup
 # Install necessary packages
-# install.packages(c("dplyr", "tidyr", "lubridate", "ggplot2", "patchwork", "ggtext", "ragg", "magick", "readxl", "tidyverse", "hrbrthemes", "plotly", "babynames", "viridis", "gridExtra", "shiny", "bslib"))
+# install.packages(c("dplyr", "tidyr", "lubridate", "ggplot2", "shiny", "bslib"))
 
 # Load necessary packages
 library(dplyr)
@@ -30,6 +30,21 @@ ui <- page_sidebar(
   
   # Sidebar panel for inputs
   sidebar = sidebar(
+    # Display total new cases and new deaths with dynamic percentage change
+    div(
+      h4("New Positive Cases"),
+      textOutput("total_new_cases"),
+      textOutput("cases_change"),
+      style = "font-size: 20px; padding: 10px; background-color: #f0f0f0; margin-bottom: 10px; border-radius: 5px;"
+    ),
+    
+    div(
+      h4("New Deaths"),
+      textOutput("total_new_deaths"),
+      textOutput("deaths_change"),
+      style = "font-size: 20px; padding: 10px; background-color: #f0f0f0; margin-bottom: 10px; border-radius: 5px;"
+    ),
+    
     # Input: Select country
     selectInput(
       inputId = "country",
@@ -51,8 +66,62 @@ ui <- page_sidebar(
   plotOutput(outputId = "timeSeriesPlot")
 )
 
-# Define server logic required to draw a time series plot
+# Define server logic required to draw a time series plot and calculate totals
 server <- function(input, output) {
+  
+  # Calculate total new cases for the latest date and compare with the previous day
+  output$total_new_cases <- renderText({
+    latest_date <- max(tblBase$date, na.rm = TRUE)
+    total_cases <- tblBase %>%
+      filter(date == latest_date) %>%
+      summarise(total_new_cases = sum(daily_new_cases, na.rm = TRUE)) %>%
+      pull(total_new_cases)
+    paste(total_cases)
+  })
+  
+  output$cases_change <- renderText({
+    latest_date <- max(tblBase$date, na.rm = TRUE)
+    previous_date <- latest_date - 1
+    
+    # Calculate new cases for the latest and previous dates
+    latest_cases <- tblBase %>% filter(date == latest_date) %>% summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>% pull(total)
+    previous_cases <- tblBase %>% filter(date == previous_date) %>% summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>% pull(total)
+    
+    # Calculate percentage change
+    if (!is.na(previous_cases) && previous_cases != 0) {
+      change_percent <- ((latest_cases - previous_cases) / previous_cases) * 100
+      paste0(round(change_percent, 1), "% vs previous day (", previous_cases, ")")
+    } else {
+      "No data for previous day"
+    }
+  })
+  
+  # Calculate total new deaths for the latest date and compare with the previous day
+  output$total_new_deaths <- renderText({
+    latest_date <- max(tblBase$date, na.rm = TRUE)
+    total_deaths <- tblBase %>%
+      filter(date == latest_date) %>%
+      summarise(total_new_deaths = sum(daily_new_deaths, na.rm = TRUE)) %>%
+      pull(total_new_deaths)
+    paste(total_deaths)
+  })
+  
+  output$deaths_change <- renderText({
+    latest_date <- max(tblBase$date, na.rm = TRUE)
+    previous_date <- latest_date - 1
+    
+    # Calculate new deaths for the latest and previous dates
+    latest_deaths <- tblBase %>% filter(date == latest_date) %>% summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>% pull(total)
+    previous_deaths <- tblBase %>% filter(date == previous_date) %>% summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>% pull(total)
+    
+    # Calculate percentage change
+    if (!is.na(previous_deaths) && previous_deaths != 0) {
+      change_percent <- ((latest_deaths - previous_deaths) / previous_deaths) * 100
+      paste0(round(change_percent, 1), "% vs previous day (", previous_deaths, ")")
+    } else {
+      "No data for previous day"
+    }
+  })
   
   # Time series plot of selected column data from tblBase for selected country
   output$timeSeriesPlot <- renderPlot({
