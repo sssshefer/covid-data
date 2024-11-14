@@ -24,13 +24,15 @@ library(plotly)  # New package for interactive bar plot
 
 # Load data
 tblBase <- read.csv("worldometer_coronavirus_daily_data.csv")
+
 # Convert date column to Date type
 tblBase$date <- as.Date(tblBase$date, format = "%Y-%m-%d")
 
+# Clearing the data to fit shiny library map naming
 tblBase <- tblBase %>%
   mutate(
     country = ifelse(country == "USA", "United States of America",
-                     ifelse(country == "UK", "United Kingdom", country))
+              ifelse(country == "UK", "United Kingdom", country))
   )
 
 # Load world boundaries data
@@ -41,7 +43,6 @@ world_data <- world %>%
   left_join(tblBase %>% filter(date == max(date, na.rm = TRUE)), by = c("name" = "country"))
 
 
-View(world_data)
 # Define UI for app with time series plot and choropleth map
 ui <- page_sidebar(
   title = "Covid Data Visualization",
@@ -83,6 +84,12 @@ ui <- page_sidebar(
 
 # Define server logic for bar plot and choropleth map
 server <- function(input, output) {
+  dataset <- reactive({
+    switch(input$dataset,
+           "data1" = data1,
+           "data2" = data2)
+  })
+  
   
   # Display total new cases for the latest date
   output$total_new_cases <- renderText({
@@ -131,10 +138,10 @@ server <- function(input, output) {
       "No data for previous day"
     }
   })
- 
-  # Render the interactive bar plot
-  # Render the interactive bar plot
-  # Render the interactive bar plot
+
+  # Create a reactive value to store the selected country
+  selected_country <- reactiveVal(NULL)
+  
   # Render the interactive bar plot
   output$barPlot <- renderPlotly({
     latest_date <- max(tblBase$date, na.rm = TRUE)
@@ -164,9 +171,14 @@ server <- function(input, output) {
       arrange(desc(!!sym(plot_column))) %>%
       slice(1:20)  # Show only top 20 countries
     
+    # Create color vector, changing color if the country is selected
+    plot_data$color <- ifelse(
+      plot_data$country == selected_country(), "#FF5733", "#00a9e0"  # Highlight selected country in orange
+    )
+    
     # Create the bar plot with ggplot2, positioning country names on the left
-    p <- ggplot(plot_data, aes(x = reorder(country, !!sym(plot_column)), y = !!sym(plot_column))) +
-      geom_bar(stat = "identity", fill = "#00a9e0") +  # Blue color for the bars
+    p <- ggplot(plot_data, aes(x = reorder(country, !!sym(plot_column)), y = !!sym(plot_column), fill = color)) +
+      geom_bar(stat = "identity") +
       geom_text(aes(label = country), hjust = 1.05, vjust = 0.5, size = 3.5, color = "black") +  # Align country names to the left
       coord_flip() +
       labs(x = NULL, y = NULL, title = if (input$map_metric == "cases") {
@@ -182,7 +194,8 @@ server <- function(input, output) {
         panel.grid.major = element_blank(),  # Remove grid lines
         panel.grid.minor = element_blank()
       ) +
-      scale_y_continuous(labels = scales::comma)  # Add comma formatting for large numbers
+      scale_y_continuous(labels = scales::comma) +  # Add comma formatting for large numbers
+      scale_fill_identity()  # Use custom colors
     
     # Convert ggplot to plotly for interactivity and hover details
     ggplotly(p, tooltip = "text") %>%
@@ -205,40 +218,52 @@ server <- function(input, output) {
           "New Deaths: ", plot_data$daily_new_deaths, "<br>",
           "Cumulative Deaths: ", plot_data$cumulative_total_deaths
         )
-      )
+      ) %>%
+      # Detect clicks and update selected country
+      event_register("plotly_click") %>%
+      event_on("plotly_click", function(event_data) {
+        # Set selected country based on clicked bar
+        selected_country(plot_data$country[event_data$pointIndex + 1])
+      })
   })
   
   
-  
-  
-  
-  
-  # Render the Leaflet map
+  # Render the Leaflet map with bubbles in the center of each country
   output$covidMap <- renderLeaflet({
+    # Get the latest date from the dataset
     latest_date <- max(tblBase$date, na.rm = TRUE)
-    map_data <- tblBase %>% filter(date == latest_date)
+    
+    # Filter data for the latest date and join with geographic boundaries
+    map_data <- world_data %>% 
+      filter(date == latest_date)
+    
+    # Choose the column to display based on input
     map_column <- if (input$map_metric == "cases") {
       if (input$map_data_type == "new") "daily_new_cases" else "cumulative_total_cases"
     } else {
       if (input$map_data_type == "new") "daily_new_deaths" else "cumulative_total_deaths"
     }
-    pal <- colorNumeric("YlOrRd", domain = map_data[[map_column]], na.color = "transparent")
+    
+    # Calculate centroids of countries for bubble placement
+    centroids <- st_centroid(world_data$geometry)
+    
+    # Create the bubble map with bubbles centered on each country's centroid
     leaflet(world_data) %>%
       addTiles() %>%
       addPolygons(
-        fillColor = ~pal(world_data[[map_column]]),
+        fillColor = "transparent",  # Make polygons transparent
         weight = 0.5,
-        opacity = 1,
         color = "white",
-        dashArray = "3",
+        fillOpacity = 0
+      ) %>%
+      addCircles(
+        lng = st_coordinates(centroids)[, 1],  # Longitude of centroid
+        lat = st_coordinates(centroids)[, 2],  # Latitude of centroid
+        fillColor = "#48caf4",  # Fixed color for bubbles
         fillOpacity = 0.7,
-        highlight = highlightOptions(
-          weight = 2,
-          color = "#666",
-          dashArray = "",
-          fillOpacity = 0.7,
-          bringToFront = TRUE
-        ),
+        color = "white",
+        weight = 1,
+        radius = ~sqrt(world_data[[map_column]] / max(map_data[[map_column]], na.rm = TRUE)) * 1000000,  # Adjust bubble size
         label = ~paste(name, ": ", round(world_data[[map_column]], 0)),
         labelOptions = labelOptions(
           style = list("font-weight" = "normal", padding = "3px 8px"),
@@ -247,13 +272,14 @@ server <- function(input, output) {
         )
       ) %>%
       addLegend(
-        pal = pal,
-        values = world_data[[map_column]],
+        colors = "#48caf4",
+        labels = paste(input$map_data_type, input$map_metric),
         opacity = 0.7,
         title = paste(input$map_data_type, input$map_metric),
         position = "bottomright"
       )
   })
+  
 }
 
 
