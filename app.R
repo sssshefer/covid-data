@@ -45,77 +45,173 @@ world_data <- world %>%
 unique_countries <- unique(tblBase$country)
 
 
-# Define UI for app with time series plot and choropleth map
-ui <- page_sidebar(
-  title = "Covid Data Visualization",
-  
-  sidebar = sidebar(
+ui <- fluidPage(
+  titlePanel(
     div(
-      h4("New Positive Cases"),
-      textOutput("total_new_cases"),
-      textOutput("cases_change"),
-      style = "font-size: 20px; padding: 10px; background-color: #f0f0f0; margin-bottom: 10px; border-radius: 5px;"
-    ),
-    
-    div(
-      h4("New Deaths"),
-      textOutput("total_new_deaths"),
-      textOutput("deaths_change"),
-      style = "font-size: 20px; padding: 10px; background-color: #f0f0f0; margin-bottom: 10px; border-radius: 5px;"
-    ),
-    
-    selectInput(
-      inputId = "map_data_type",
-      label = "Select data type:",
-      choices = c("New" = "new", "Cumulative" = "cumulative"),
-      selected = "new"
-    ),
-    
-    selectInput(
-      inputId = "map_metric",
-      label = "Select metric:",
-      choices = c("Positive Cases" = "cases", "Deaths" = "deaths"),
-      selected = "cases"
-    ),
-
-     selectInput(
-    inputId = "map_data_country",
-    label = "Select country:",
-    choices = unique_countries,
-    selected = unique_countries[1]  # Select the first country by default
-  )
-    
+      style = "background-color: #2E3B4E; padding: 15px; color: white; font-size: 24px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; width: 100vw; margin-left: calc(-50vw + 50%);",
+      
+      # Left section with title and date
+      div(
+        style = "display: flex; flex-direction: column;",
+        "Global COVID-19 Tracker",
+        span("January 21, 2020 - April 29, 2022", style = "font-size: 14px; font-weight: normal; color: #B0B0B0;")
+      )
+    )
   ),
   
-  plotlyOutput(outputId = "barPlot"),  # Plotly output for interactive scrollable plot
+  # Dropdowns aligned horizontally above the main content
+  fluidRow(
+    column(12, align = "center",
+           div(
+             style = "display: flex; justify-content: center; gap: 20px; margin-top: 15px; margin-bottom: 15px;",
+             selectInput(
+               inputId = "map_data_type",
+               label = "New or Cumulative",
+               choices = c("New" = "new", "Cumulative" = "cumulative"),
+               selected = "new"
+             ),
+             
+             selectInput(
+               inputId = "map_metric",
+               label = "Positive Cases or Deaths",
+               choices = c("Positive Cases" = "cases", "Deaths" = "deaths"),
+               selected = "cases"
+             ),
+             
+             selectInput(
+               inputId = "map_data_country",
+               label = "Country",
+               choices = c("Global" = "Global", unique_countries),
+               selected = "Global"
+             )
+           )
+    )
+  ),
   
-  leafletOutput(outputId = "covidMap", height = "600px")
+  # Main content divided into three sections
+  fluidRow(
+    # Left section: summary
+    column(3,
+           div(
+             h4(textOutput("positive_cases_title")),
+             textOutput("total_new_cases"),
+             textOutput("cases_change"),
+             style = "font-size: 20px; padding: 10px; background-color: #f0f0f0; margin-bottom: 10px; border-radius: 5px;"
+           ),
+           
+           plotlyOutput(outputId = "new_cases_plot"),
+           
+           div(
+             h4(textOutput("deaths_title")),
+             textOutput("total_new_deaths"),
+             textOutput("deaths_change"),
+             style = "font-size: 20px; padding: 10px; background-color: #f0f0f0; margin-bottom: 10px; border-radius: 5px;"
+           )
+    ),
+    
+    # Center section: map
+    column(5,
+           leafletOutput(outputId = "covidMap", height = "600px", width = "600px")
+    ),
+    
+    # Right section: bar plot
+    column(4,
+           plotlyOutput(outputId = "barPlot")
+    )
+  )
 )
 
 # Define server logic for bar plot and choropleth map
 server <- function(input, output) {
+  # Reactive dataset based on selected country
   dataset <- reactive({
-    switch(input$dataset,
-           "data1" = data1,
-           "data2" = data2)
+    if (is.null(input$map_data_country) || input$map_data_country == "Global") {
+      tblBase
+    } else {
+      tblBase %>% filter(country == input$map_data_country)
+    }
   })
   
-  # Display total new cases for the latest date
+  # ------------------------------------------------------------
+  # POSITIVE CASES TITLE
+  # (NEW OR CUMULATIVE)
+  output$positive_cases_title <- renderText({
+    type <- input$map_data_type  # "new" or "cumulative"
+    
+    if (type == "new") {
+      return("New Positive Cases")
+    } else if (type == "cumulative") {
+      return("Cumulative Positive Cases")
+    }
+  })
+  
+  # POSITIVE CASES VALUE
+  # (NEW OR CUMULATIVE) (SPECIFIC COUNTRY OR GLOBAL)
   output$total_new_cases <- renderText({
-    latest_date <- max(tblBase$date, na.rm = TRUE)
-    total_cases <- tblBase %>%
-      filter(date == latest_date) %>%
-      summarise(total_new_cases = sum(daily_new_cases, na.rm = TRUE)) %>%
-      pull(total_new_cases)
-    paste(total_cases)
+    # Get the dataset based on the selected country
+    data <- dataset()
+    
+    # Find the latest date in the filtered dataset
+    latest_date <- max(data$date, na.rm = TRUE)
+    
+    # Determine if "new" or "cumulative" data should be shown
+    type <- input$map_data_type  # "new" or "cumulative"
+    
+    if (type == "new") {
+      # Summarize total new cases for the latest date
+      total_cases <- data %>%
+        filter(date == latest_date) %>%
+        summarise(total_new_cases = sum(daily_new_cases, na.rm = TRUE)) %>%
+        pull(total_new_cases)
+    } else if (type == "cumulative") {
+      # Calculate cumulative total cases (sum of all cases up to the latest date)
+      total_cases <- data %>%
+        filter(date <= latest_date) %>%
+        summarise(total_cumulative_cases = sum(daily_new_cases, na.rm = TRUE)) %>%
+        pull(total_cumulative_cases)
+    }
+    
+    # Display total cases, handling the case if there are no new cases
+    if (is.na(total_cases)) {
+      return("No data available.")
+    } else {
+      return(paste(total_cases))
+    }
   })
   
-  # Display percentage change in new cases
+  # PERCENTAGE CHANGE IN POSITIVE CASES 
+  # (NEW OR CUMULATIVE) (SPECIFIC COUNTRY OR GLOBAL)
   output$cases_change <- renderText({
-    latest_date <- max(tblBase$date, na.rm = TRUE)
+    data <- dataset()
+    latest_date <- max(data$date, na.rm = TRUE)
     previous_date <- latest_date - 1
-    latest_cases <- tblBase %>% filter(date == latest_date) %>% summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>% pull(total)
-    previous_cases <- tblBase %>% filter(date == previous_date) %>% summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>% pull(total)
+    type <- input$map_data_type  # "new" or "cumulative"
+    
+    # Determine the total cases based on the type (new or cumulative)
+    if (type == "new") {
+      latest_cases <- data %>%
+        filter(date == latest_date) %>%
+        summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>%
+        pull(total)
+      
+      previous_cases <- data %>%
+        filter(date == previous_date) %>%
+        summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>%
+        pull(total)
+      
+    } else if (type == "cumulative") {
+      latest_cases <- data %>%
+        filter(date <= latest_date) %>%
+        summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>%
+        pull(total)
+      
+      previous_cases <- data %>%
+        filter(date <= previous_date) %>%
+        summarise(total = sum(daily_new_cases, na.rm = TRUE)) %>%
+        pull(total)
+    }
+    
+    # Calculate percentage change if previous data exists
     if (!is.na(previous_cases) && previous_cases != 0) {
       change_percent <- ((latest_cases - previous_cases) / previous_cases) * 100
       paste0(round(change_percent, 1), "% vs previous day (", previous_cases, ")")
@@ -124,22 +220,143 @@ server <- function(input, output) {
     }
   })
   
-  # Display total new deaths for the latest date
+  # HORIZONTAL PLOT POSITIVE 
+  # (NEW OR COMULATIVE) (SPECIFIC COUNTRY OR GLOBAL)
+  # HORIZONTAL PLOT POSITIVE (NEW OR CUMULATIVE) (SPECIFIC COUNTRY OR GLOBAL)
+  output$new_cases_plot <- renderPlotly({
+    data <- dataset()
+    
+    # Get the map_data_type (either "new" or "cumulative")
+    type <- input$map_data_type  # "new" or "cumulative"
+    
+    # Ensure the data is sorted by date for correct timeline visualization
+    data_sorted <- data %>%
+      group_by(date) %>%
+      summarise(total_new_cases = sum(daily_new_cases, na.rm = TRUE)) %>%
+      arrange(date)
+    
+    # Convert 'date' to Date class for better handling
+    data_sorted$date <- as.Date(data_sorted$date)
+    
+    if (type == "new") {
+      # For "new", we show the daily new cases
+      p <- ggplot(data_sorted, aes(x = total_new_cases, y = reorder(date, total_new_cases))) +
+        geom_bar(stat = "identity", fill = "skyblue") +
+        coord_flip() +  # Horizontal bar plot
+        labs(
+          title = "New Cases Over Time",
+          x = "New Cases",
+          y = "Date"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          axis.text.y = element_text(size = 8)
+        )
+    } else if (type == "cumulative") {
+      # For "cumulative", we calculate cumulative cases over time
+      data_sorted <- data_sorted %>%
+        mutate(cumulative_cases = cumsum(total_new_cases))
+      
+      p <- ggplot(data_sorted, aes(x = cumulative_cases, y = reorder(date, cumulative_cases))) +
+        geom_bar(stat = "identity", fill = "lightcoral") +
+        coord_flip() +  # Horizontal bar plot
+        labs(
+          title = "Cumulative Cases Over Time",
+          x = "Cumulative Cases",
+          y = "Date"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          axis.text.y = element_text(size = 8)
+        )
+    }
+    
+    # Adjust y-axis to show only every third month
+    p <- p + scale_y_discrete(
+      breaks = data_sorted$date[seq(1, nrow(data_sorted), by = 3)],  # Every 3rd date
+      labels = format(data_sorted$date[seq(1, nrow(data_sorted), by = 3)], "%b %Y")  # Format dates as "Month Year"
+    )
+    
+    # Convert ggplot to plotly for interactivity and hover details
+    ggplotly(p)
+  })
+  
+
+  # ------------------------------------------------------------
+  # DEATHS TITLE
+  # (NEW OR CUMULATIVE)
+  output$deaths_title <- renderText({
+    type <- input$map_data_type  # "new" or "cumulative"
+    
+    if (type == "new") {
+      return("New Deaths")
+    } else if (type == "cumulative") {
+      return("Cumulative Deaths")
+    }
+  })
+  
+  # DISPLAY DEATHS VALUE 
+  # (NEW OR CUMULATIVE)
   output$total_new_deaths <- renderText({
-    latest_date <- max(tblBase$date, na.rm = TRUE)
-    total_deaths <- tblBase %>%
-      filter(date == latest_date) %>%
-      summarise(total_new_deaths = sum(daily_new_deaths, na.rm = TRUE)) %>%
-      pull(total_new_deaths)
+    data <- dataset()
+    type <- input$map_data_type  # "new" or "cumulative"
+    
+    latest_date <- max(data$date, na.rm = TRUE)
+    
+    if (type == "new") {
+      # Calculate total new deaths for the latest date
+      total_deaths <- data %>%
+        filter(date == latest_date) %>%
+        summarise(total_new_deaths = sum(daily_new_deaths, na.rm = TRUE)) %>%
+        pull(total_new_deaths)
+    } else if (type == "cumulative") {
+      # Calculate cumulative deaths up to the latest date
+      total_deaths <- data %>%
+        filter(date <= latest_date) %>%
+        summarise(total_cumulative_deaths = sum(daily_new_deaths, na.rm = TRUE)) %>%
+        pull(total_cumulative_deaths)
+    }
+    
+    # Return total deaths
     paste(total_deaths)
   })
   
-  # Display percentage change in new deaths
+  # PERCENTAGE CHANGE IN DEATHS 
+  # (NEW OR CUMULATIVE)
   output$deaths_change <- renderText({
-    latest_date <- max(tblBase$date, na.rm = TRUE)
+    data <- dataset()
+    type <- input$map_data_type  # "new" or "cumulative"
+    
+    latest_date <- max(data$date, na.rm = TRUE)
     previous_date <- latest_date - 1
-    latest_deaths <- tblBase %>% filter(date == latest_date) %>% summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>% pull(total)
-    previous_deaths <- tblBase %>% filter(date == previous_date) %>% summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>% pull(total)
+    
+    if (type == "new") {
+      # Get total new deaths for the latest and previous date
+      latest_deaths <- data %>%
+        filter(date == latest_date) %>%
+        summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>%
+        pull(total)
+      
+      previous_deaths <- data %>%
+        filter(date == previous_date) %>%
+        summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>%
+        pull(total)
+    } else if (type == "cumulative") {
+      # Get cumulative deaths up to the latest and previous date
+      latest_deaths <- data %>%
+        filter(date <= latest_date) %>%
+        summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>%
+        pull(total)
+      
+      previous_deaths <- data %>%
+        filter(date <= previous_date) %>%
+        summarise(total = sum(daily_new_deaths, na.rm = TRUE)) %>%
+        pull(total)
+    }
+    
+    # Calculate and display percentage change
     if (!is.na(previous_deaths) && previous_deaths != 0) {
       change_percent <- ((latest_deaths - previous_deaths) / previous_deaths) * 100
       paste0(round(change_percent, 1), "% vs previous day (", previous_deaths, ")")
@@ -147,7 +364,8 @@ server <- function(input, output) {
       "No data for previous day"
     }
   })
-
+  
+  # ------------------------------------------------------------
   # Render the interactive bar plot
   output$barPlot <- renderPlotly({
     latest_date <- max(tblBase$date, na.rm = TRUE)
@@ -178,7 +396,7 @@ server <- function(input, output) {
       geom_text(aes(label = country), hjust = 1.05, vjust = 0.5, size = 3.5, color = "black") +  # Align country names to the left
       coord_flip() +
       labs(x = NULL, y = NULL, title = if (input$map_metric == "cases") {
-        if (input$map_data_type == "new") "Daily new cases" else "Cumulative total cases"
+        if (input$map_data_type == "new") "New Positive Cases" else "Cumulative total cases"
       } else {
         if (input$map_data_type == "new") "Daily new deaths" else "Cumulative total deaths"
       }) +  # Simplified axis labels
@@ -216,6 +434,7 @@ server <- function(input, output) {
       )
   })
   
+  # ------------------------------------------------------------
   # Render the Leaflet map with bubbles in the center of each country
   output$covidMap <- renderLeaflet({
     # Get the latest date from the dataset
