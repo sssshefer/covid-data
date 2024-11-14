@@ -42,6 +42,8 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 world_data <- world %>%
   left_join(tblBase %>% filter(date == max(date, na.rm = TRUE)), by = c("name" = "country"))
 
+unique_countries <- unique(tblBase$country)
+
 
 # Define UI for app with time series plot and choropleth map
 ui <- page_sidebar(
@@ -74,7 +76,15 @@ ui <- page_sidebar(
       label = "Select metric:",
       choices = c("Positive Cases" = "cases", "Deaths" = "deaths"),
       selected = "cases"
-    )
+    ),
+
+     selectInput(
+    inputId = "map_data_country",
+    label = "Select country:",
+    choices = unique_countries,
+    selected = unique_countries[1]  # Select the first country by default
+  )
+    
   ),
   
   plotlyOutput(outputId = "barPlot"),  # Plotly output for interactive scrollable plot
@@ -89,7 +99,6 @@ server <- function(input, output) {
            "data1" = data1,
            "data2" = data2)
   })
-  
   
   # Display total new cases for the latest date
   output$total_new_cases <- renderText({
@@ -139,18 +148,10 @@ server <- function(input, output) {
     }
   })
 
-  # Create a reactive value to store the selected country
-  selected_country <- reactiveVal(NULL)
-  
   # Render the interactive bar plot
   output$barPlot <- renderPlotly({
     latest_date <- max(tblBase$date, na.rm = TRUE)
     plot_data <- tblBase %>% filter(date == latest_date)
-    
-    # Check if we have any data for the plot
-    if (nrow(plot_data) == 0) {
-      return(NULL)  # If no data, return NULL to prevent plot rendering
-    }
     
     # Choose the appropriate column based on input values
     plot_column <- if (input$map_metric == "cases") {
@@ -171,14 +172,9 @@ server <- function(input, output) {
       arrange(desc(!!sym(plot_column))) %>%
       slice(1:20)  # Show only top 20 countries
     
-    # Create color vector, changing color if the country is selected
-    plot_data$color <- ifelse(
-      plot_data$country == selected_country(), "#FF5733", "#00a9e0"  # Highlight selected country in orange
-    )
-    
     # Create the bar plot with ggplot2, positioning country names on the left
-    p <- ggplot(plot_data, aes(x = reorder(country, !!sym(plot_column)), y = !!sym(plot_column), fill = color)) +
-      geom_bar(stat = "identity") +
+    p <- ggplot(plot_data, aes(x = reorder(country, !!sym(plot_column)), y = !!sym(plot_column))) +
+      geom_bar(stat = "identity", fill = "#00a9e0") +  # Blue color for the bars
       geom_text(aes(label = country), hjust = 1.05, vjust = 0.5, size = 3.5, color = "black") +  # Align country names to the left
       coord_flip() +
       labs(x = NULL, y = NULL, title = if (input$map_metric == "cases") {
@@ -194,8 +190,7 @@ server <- function(input, output) {
         panel.grid.major = element_blank(),  # Remove grid lines
         panel.grid.minor = element_blank()
       ) +
-      scale_y_continuous(labels = scales::comma) +  # Add comma formatting for large numbers
-      scale_fill_identity()  # Use custom colors
+      scale_y_continuous(labels = scales::comma)  # Add comma formatting for large numbers
     
     # Convert ggplot to plotly for interactivity and hover details
     ggplotly(p, tooltip = "text") %>%
@@ -218,15 +213,8 @@ server <- function(input, output) {
           "New Deaths: ", plot_data$daily_new_deaths, "<br>",
           "Cumulative Deaths: ", plot_data$cumulative_total_deaths
         )
-      ) %>%
-      # Detect clicks and update selected country
-      event_register("plotly_click") %>%
-      event_on("plotly_click", function(event_data) {
-        # Set selected country based on clicked bar
-        selected_country(plot_data$country[event_data$pointIndex + 1])
-      })
+      )
   })
-  
   
   # Render the Leaflet map with bubbles in the center of each country
   output$covidMap <- renderLeaflet({
