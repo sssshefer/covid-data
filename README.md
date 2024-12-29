@@ -2,6 +2,8 @@
 
 This project provides an interactive COVID-19 global map that allows users to visualize the spread of COVID-19 cases and deaths worldwide. Users can explore the map with customizable metrics, including the option to view new or cumulative cases and deaths for each country or globally. The project is implemented using R, the Shiny package for interactive web applications, and the Leaflet library for rendering the map.
 
+![{5295F3F0-D45C-496A-90D8-1A1E72C4BC72}](https://github.com/user-attachments/assets/a9092677-4d41-4366-85f1-df64cba4d1d4)
+
 ## Table of Contents
 - [Theory Notes](#theory-notes)
   - [R Overview](#r-overview)
