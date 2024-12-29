@@ -266,51 +266,41 @@ server <- function(input, output) {
     
     if (type == "new") {
       # For "new", we show the daily new cases
-      p <- ggplot(data_sorted, aes(x = total_new_cases, y = reorder(date, total_new_cases))) +
+      p <- ggplot(data_sorted, aes(x = date, y = total_new_cases)) +
         geom_bar(stat = "identity", fill = "#48caf4") +
-        coord_flip() +  # Horizontal bar plot
         labs(
-          x = "New Cases",
-          y = "Date"
+          x = "Date",
+          y = "New Cases"
         ) +
         theme_minimal() +
         theme(
           plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-          axis.text.y = element_text(size = 8)
+          axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
         ) 
     } else if (type == "cumulative") {
       # For "cumulative", we calculate cumulative cases over time
       data_sorted <- data_sorted %>%
         mutate(cumulative_cases = cumsum(total_new_cases))
       
-      p <- ggplot(data_sorted, aes(x = cumulative_cases, y = reorder(date, cumulative_cases))) +
+      p <- ggplot(data_sorted, aes(x = date, y = cumulative_cases)) +
         geom_bar(stat = "identity", fill = "#48caf4") +
-        coord_flip() +  # Horizontal bar plot
         labs(
           title = "Cumulative Positive Cases",
-          x = "Cumulative Cases",
-          y = "Date"
+          x = "Date",
+          y = "Cumulative Cases"
         ) +
         theme_minimal() +
         theme(
           plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-          axis.text.y = element_text(size = 8)
+          axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
         ) +
-        scale_x_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M"))
+        scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M"))
     }
-    
-    # Adjust y-axis to show only every third month
-    breaks <- seq(1, nrow(data_sorted), by = 3)  # Every 3rd date
-    labels <- format(data_sorted$date[breaks], "%b %Y")  # Format dates as "Month Year"
-    
-    p <- p + scale_y_discrete(
-      breaks = data_sorted$date[breaks],  # Every 3rd date
-      labels = labels  # Display formatted month-year labels
-    ) + scale_x_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M"))
     
     # Convert ggplot to plotly for interactivity and hover details
     ggplotly(p)
   })
+  
   
 
 
@@ -403,44 +393,54 @@ server <- function(input, output) {
     # Get the selected data type: "new" or "cumulative"
     type <- input$map_data_type  # "new" or "cumulative"
     
-    # Prepare and sort the data for visualization
+    # Ensure the data is sorted by date for correct timeline visualization
     data_sorted <- data %>%
       group_by(date) %>%
-      summarise(total_deaths = if (type == "new") {
-        sum(daily_new_deaths, na.rm = TRUE)
-      } else {
-        cumsum(sum(daily_new_deaths, na.rm = TRUE))
-      }) %>%
+      summarise(total_new_deaths = sum(daily_new_deaths, na.rm = TRUE)) %>%
       arrange(date)
     
-    # Ensure the date is in Date format
+    # Convert 'date' to Date class for better handling
     data_sorted$date <- as.Date(data_sorted$date)
     
-    # Create the plot based on the data type
-    p <- ggplot(data_sorted, aes(x = total_deaths, y = reorder(date, total_deaths))) +
-      geom_bar(stat = "identity", fill = if (type == "new") "#48caf4" else "#48caf4") +  # Red shades for deaths
-      coord_flip() +  # Horizontal bar plot
-      labs(
-        x = if (type == "new") "Daily Deaths" else "Cumulative Deaths",
-        y = "Date"
-      ) +
-      theme_minimal() +
-      theme(
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        axis.text.y = element_text(size = 8)  # Smaller text for better readability
-      )
+    if (type == "new") {
+      # For "new", we show the daily new deaths
+      p <- ggplot(data_sorted, aes(x = date, y = total_new_deaths)) +
+        geom_bar(stat = "identity", fill = "#48caf4") +
+        labs(
+          x = "Date",
+          y = "New Deaths"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+        )
+    } else if (type == "cumulative") {
+      # For "cumulative", we calculate cumulative deaths over time
+      data_sorted <- data_sorted %>%
+        mutate(cumulative_deaths = cumsum(total_new_deaths))
+      
+      p <- ggplot(data_sorted, aes(x = date, y = cumulative_deaths)) +
+        geom_bar(stat = "identity", fill = "#48caf4") +
+        labs(
+          title = "Cumulative Deaths",
+          x = "Date",
+          y = "Cumulative Deaths"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+          axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+        ) +
+        scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = "M"))
+    }
     
-    # Adjust y-axis to display only significant dates
-    p <- p + scale_y_discrete(
-      breaks = data_sorted$date[seq(1, nrow(data_sorted), by = 3)],  # Show every 3rd date
-      labels = format(data_sorted$date[seq(1, nrow(data_sorted), by = 3)], "%b %Y")  # Format as "Month Year"
-    ) + scale_x_continuous(labels = scales::label_number(scale = 0.001, suffix = "K"))
-    
-    # Convert ggplot to Plotly for interactivity
+    # Convert ggplot to Plotly for interactivity and hover details
     ggplotly(p)
   })
   
   
+
   # ------------------------------------------------------------
   # Render the interactive bar plot
   output$barPlot <- renderPlotly({
