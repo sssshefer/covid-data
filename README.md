@@ -21,8 +21,6 @@ R is a programming language and free software environment used for statistical c
 - **dplyr** and **tidyr**: Help with data manipulation.
 - **sf**: Provides support for spatial data.
 
-### Additional Concepts
-If necessary, further theoretical topics can be added to help users unfamiliar with R or the specifics of COVID-19 data handling.
 
 ## Features and Functionality
 - **Interactive Map**: Users can view COVID-19 data on a global map, with the option to select the data type (new or cumulative) and metrics (positive cases or deaths).
