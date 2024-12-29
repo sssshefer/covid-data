@@ -24,12 +24,11 @@ R is a programming language and free software environment used for statistical c
 
 ## Features and Functionality
 - **Interactive Map**: Users can view COVID-19 data on a global map, with the option to select the data type (new or cumulative) and metrics (positive cases or deaths).
-- **Real-time Data Updates**: The data updates automatically, showing the most recent information available.
 - **Customizable Views**: Dropdown menus allow users to select countries and different data types, adjusting the map and accompanying charts accordingly.
-- **Data Visualization**: Visualizations include a choropleth map, bar plots for cases and deaths, and the ability to track trends over time.
+- **Data Visualization**: Visualizations include a bubble map, bar plots for cases and deaths, and the ability to track trends over time.
 
 ## Implementation
-The implementation of this project is dynamic and relies on reactive programming provided by the Shiny framework. The map and data visualizations are updated in real-time based on user inputs. This ensures that the map reflects the current state of the pandemic across the globe, as well as detailed metrics for specific countries.
+The implementation of this project is dynamic and relies on reactive programming provided by the Shiny framework. The map and data visualizations are updated in real-time based on user inputs. This ensures that the map reflects the selected state of the pandemic across the globe, as well as detailed metrics for specific countries.
 
 The project uses a combination of R packages for data handling, map rendering, and interactive plotting:
 - **Leaflet**: For rendering the interactive map with COVID-19 case and death data.
