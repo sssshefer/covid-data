@@ -44,7 +44,6 @@ The project uses a combination of R packages for data handling, map rendering, a
 ```r
 install.packages(c("dplyr", "tidyr", "lubridate", "ggplot2", "shiny", "bslib", "leaflet", "rnaturalearth", "sf", "rnaturalearthdata", "plotly"))
 ```
-## Run the Application:
 Clone the repo and open the project by clicking on the .R file.
 > [!IMPORTANT]
 > Ensure that you open the file directly from the file explorer rather than from within RStudio. This ensures that the local file paths are set correctly for the dataset.
